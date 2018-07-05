@@ -1,0 +1,372 @@
+diff --git a/eulexistdb/db.py b/eulexistdb/db.py
+index b8c45dc..a0ed634 100644
+--- a/eulexistdb/db.py
++++ b/eulexistdb/db.py
+@@ -99,10 +99,10 @@ import logging
+ import requests
+ import socket
+ import time
+-from urllib import splittype
+-import urlparse
++from urllib.parse import splittype
++import urllib.parse
+ import warnings
+-import xmlrpclib
++import xmlrpc.client
+ 
+ try:
+     from django.dispatch import Signal
+@@ -127,8 +127,8 @@ def _wrap_xmlrpc_fault(f):
+             return f(*args, **kwargs)
+         except (socket.timeout, requests.exceptions.ReadTimeout) as err:
+             raise ExistDBTimeout(err)
+-        except (socket.error, xmlrpclib.Fault,
+-                xmlrpclib.ProtocolError, xmlrpclib.ResponseError,
++        except (socket.error, xmlrpc.client.Fault,
++                xmlrpc.client.ProtocolError, xmlrpc.client.ResponseError,
+                 requests.exceptions.ConnectionError) as err:
+             raise ExistDBException(err)
+         # FIXME: could we catch IOerror (connection reset) and try again ?
+@@ -253,7 +253,7 @@ class ExistDB(object):
+         transport = RequestsTransport(timeout=timeout, session=self.session,
+                                       url=self.exist_url, **datetime_opt)
+ 
+-        self.server = xmlrpclib.ServerProxy(
++        self.server = xmlrpc.client.ServerProxy(
+                 uri='%s/xmlrpc' % self.exist_url.rstrip('/'),
+                 transport=transport,
+                 encoding=encoding,
+@@ -288,7 +288,7 @@ class ExistDB(object):
+     def _init_from_xmlrpc_url(self, url):
+         # map old-style xmlrpc url with username/password to
+         # new-style initialization
+-        parsed = urlparse.urlparse(url)
++        parsed = urllib.parse.urlparse(url)
+         # add username/password if set
+         if parsed.username:
+             self.username = parsed.username
+@@ -534,7 +534,7 @@ class ExistDB(object):
+             result_type = self.resultType
+ 
+         opts = ' '.join('%s=%s' % (key.lstrip('_'), val)
+-                        for key, val in params.iteritems() if key != '_query')
++                        for key, val in params.items() if key != '_query')
+         if xquery:
+             debug_query = '\n%s' % xquery
+         else:
+@@ -857,7 +857,7 @@ class ExistExceptionResponse(xmlmap.XmlObject):
+ 
+ # requests-based xmlrpc transport
+ # https://gist.github.com/chrisguitarguy/2354951
+-class RequestsTransport(xmlrpclib.Transport):
++class RequestsTransport(xmlrpc.client.Transport):
+     """
+     Transport for xmlrpclib that uses Requests instead of httplib.
+ 
+@@ -870,7 +870,7 @@ class RequestsTransport(xmlrpclib.Transport):
+         be used when making xmlrpc requests
+     """
+     # update user agent to reflect use of requests
+-    user_agent = "xmlrpclib.py/%s via requests %s" % (xmlrpclib.__version__,
++    user_agent = "xmlrpclib.py/%s via requests %s" % (xmlrpc.client.__version__,
+         requests.__version__)
+ 
+     # boolean flag to indicate whether https should be used or not
+@@ -881,7 +881,7 @@ class RequestsTransport(xmlrpclib.Transport):
+         # if default timeout is requested, use the global socket default
+         if timeout is ExistDB.DEFAULT_TIMEOUT:
+             timeout = socket.getdefaulttimeout()
+-        xmlrpclib.Transport.__init__(self, *args, **kwargs)
++        xmlrpc.client.Transport.__init__(self, *args, **kwargs)
+         self.timeout = timeout
+         # NOTE: assumues that if basic auth is needed, it is set
+         # on the session that is passed in
+@@ -912,7 +912,7 @@ class RequestsTransport(xmlrpclib.Transport):
+             try:
+                 resp.raise_for_status()
+             except requests.RequestException as err:
+-                raise xmlrpclib.ProtocolError(url, resp.status_code,
++                raise xmlrpc.client.ProtocolError(url, resp.status_code,
+                                               str(err), resp.headers)
+             else:
+                 return self.parse_response(resp)
+@@ -920,7 +920,7 @@ class RequestsTransport(xmlrpclib.Transport):
+     def getparser(self):
+         # Patch the parser to prevent errors on Apache's extended
+         # attributes. See the code in the patch module for details.
+-        parser, unmarshaller = xmlrpclib.Transport.getparser(self)
++        parser, unmarshaller = xmlrpc.client.Transport.getparser(self)
+         return patch.XMLRpcLibPatch.apply(parser, unmarshaller)
+ 
+     def parse_response(self, resp):
+diff --git a/eulexistdb/debug_panel.py b/eulexistdb/debug_panel.py
+index 153c382..9f8a179 100644
+--- a/eulexistdb/debug_panel.py
++++ b/eulexistdb/debug_panel.py
+@@ -46,7 +46,7 @@ class ExistDBPanel(Panel):
+             return_value = return_value.serialize()
+ 
+         # remove empty values from kwargs, to simplify display
+-        for k, val in list(kwargs.iteritems()):
++        for k, val in list(kwargs.items()):
+             if val is None:
+                 del kwargs[k]
+ 
+diff --git a/eulexistdb/exceptions.py b/eulexistdb/exceptions.py
+index 3292400..dd24772 100644
+--- a/eulexistdb/exceptions.py
++++ b/eulexistdb/exceptions.py
+@@ -15,8 +15,8 @@
+ #   limitations under the License.
+ 
+ import socket
+-import xmlrpclib
+-from urllib import unquote_plus
++import xmlrpc.client
++from urllib.parse import unquote_plus
+ 
+ class ExistDBException(Exception):
+     """A handy wrapper for all errors returned by the eXist server."""
+@@ -36,7 +36,7 @@ class ExistDBException(Exception):
+         elif isinstance(orig_except, socket.error):
+             # socket error is a tuple of errno, error string
+             message = 'I/O Error: %s' % orig_except[1]
+-        elif isinstance(orig_except, xmlrpclib.ProtocolError):
++        elif isinstance(orig_except, xmlrpc.client.ProtocolError):
+             message = 'XMLRPC Error at %(url)s: %(code)s %(msg)s' % {
+                     'url': orig_except.url,
+                     'code': orig_except.errcode,
+diff --git a/eulexistdb/models.py b/eulexistdb/models.py
+index 1dcacbd..76ea158 100644
+--- a/eulexistdb/models.py
++++ b/eulexistdb/models.py
+@@ -48,7 +48,7 @@ class XmlModelType(XmlObjectType):
+         use_attrs = {}
+         managers = {}
+ 
+-        for attr_name, attr_val in defined_attrs.items():
++        for attr_name, attr_val in list(defined_attrs.items()):
+             # XXX: like in XmlObjectType, not a fan of isinstance here.
+             # consider using something like django's contribute_to_class.
+ 
+@@ -72,13 +72,13 @@ class XmlModelType(XmlObjectType):
+         new_class = super_new(cls, name, bases, use_attrs)
+ 
+         # and then patch that new class into the managers:
+-        for manager in managers.values():
++        for manager in list(managers.values()):
+             manager.model = new_class
+ 
+         return new_class
+ 
+ 
+-class XmlModel(XmlObject):
++class XmlModel(XmlObject, metaclass=XmlModelType):
+ 
+     """
+     An :class:`~eulxml.xmlmap.XmlObject` in an
+@@ -91,5 +91,3 @@ class XmlModel(XmlObject):
+     :class:`~eulexistdb.manager.Manager` members for easy access to
+     stored models.
+     """
+-
+-    __metaclass__ = XmlModelType
+diff --git a/eulexistdb/patch.py b/eulexistdb/patch.py
+index ed285c1..cc79de8 100644
+--- a/eulexistdb/patch.py
++++ b/eulexistdb/patch.py
+@@ -2,7 +2,7 @@
+ Manage and apply patches necessary to work around issues in
+ third-party libraries.
+ """
+-import xmlrpclib
++import xmlrpc.client
+ import collections
+ from decimal import Decimal
+ 
+@@ -56,13 +56,13 @@ class XMLRpcLibPatch(Patch):
+             return cls._warranted
+ 
+         good = True
+-        parser, unmarshaller = xmlrpclib.getparser()
++        parser, unmarshaller = xmlrpc.client.getparser()
+         try:
+             # This will fail if the unmarshaller is unable to handle ex:nil.
+             # We do not test for every value that we patch for. We assume if
+             # ex:nil won't work, no other extended value will.
+             parser.feed("<params><param><value><ex:nil/></value></param></params>")
+-        except xmlrpclib.ResponseError:
++        except xmlrpc.client.ResponseError:
+             good = False
+ 
+         # Trying to close if there was an error earlier won't work.
+diff --git a/eulexistdb/query.py b/eulexistdb/query.py
+index 682a4ef..a0082a8 100644
+--- a/eulexistdb/query.py
++++ b/eulexistdb/query.py
+@@ -224,7 +224,7 @@ class QuerySet(object):
+ 
+         qscopy = self._getCopy()
+ 
+-        for arg, value in kwargs.iteritems():
++        for arg, value in kwargs.items():
+             fields, rest = _split_fielddef(arg, self.model)
+             if rest and rest not in qscopy.query.available_filters:
+                 # check if xpath portion is actually an xquery predefined field
+@@ -441,7 +441,7 @@ class QuerySet(object):
+         'Common functionality for :meth:`also_raw` and :meth:`only_raw`.'
+         field_objs = {}
+         field_xpath = {}
+-        for field, xpath in fields.iteritems():
++        for field, xpath in fields.items():
+             field_xpath[field] = xpath
+             fieldlist, rest = _split_fielddef(field, self.model)
+             if fieldlist and not rest:
+@@ -541,7 +541,7 @@ class QuerySet(object):
+ 
+     def __getitem__(self, k):
+         """Return a single result or slice of results from the query."""
+-        if not isinstance(k, (slice, int, long)):
++        if not isinstance(k, (slice, int)):
+             raise TypeError
+ 
+         if isinstance(k, slice):
+@@ -722,7 +722,7 @@ def _create_return_class(baseclass, override_fields, xpath_prefix=None,
+     # collect names of subobjects, with information needed to create additional return classes
+     subclasses = {}
+     subclass_fields = {}
+-    for name, fields in override_fields.iteritems():
++    for name, fields in override_fields.items():
+ 
+         # nested object fields are indicated by basename__subname
+         if '__' in name:
+@@ -739,7 +739,7 @@ def _create_return_class(baseclass, override_fields, xpath_prefix=None,
+                 field_type = xmlmap.DateTimeField
+             elif name == 'match_count':
+                 field_type = xmlmap.IntegerField
+-            elif fields is None or isinstance(fields, basestring):
++            elif fields is None or isinstance(fields, str):
+                 field_type = xmlmap.StringField    # handle special cases like fulltext score
+             else:
+                 field_type = type(fields[-1])
+@@ -770,7 +770,7 @@ def _create_return_class(baseclass, override_fields, xpath_prefix=None,
+                 class_fields[name] = field_type(xpath)
+ 
+     # create subclasses and add to current class fields
+-    for subclass_name, nodefield in subclasses.iteritems():
++    for subclass_name, nodefield in subclasses.items():
+         # create a new class derived from the configured nodefield class, with subclass fields
+         prefix = subclass_name
+         if xpath_prefix:
+@@ -904,7 +904,7 @@ class Xquery(object):
+         declarations = None
+         if self.namespaces:
+             declarations = '\n'.join('''declare namespace %s='%s';''' % (prefix, urn)
+-                                for prefix, urn in self.namespaces.iteritems())
++                                for prefix, urn in self.namespaces.items())
+ 
+         xpath_parts = []
+         if self.document is not None:
+@@ -951,7 +951,7 @@ class Xquery(object):
+                 # construct xml option configuration for fulltext query
+                 E = ElementMaker()
+                 opts = E('options')
+-                for field, value in self.fulltext_options.iteritems():
++                for field, value in self.fulltext_options.items():
+                     opts.append(E(field, value))
+                 flowr_pre = 'let %s := %s' % (self.ft_option_xqvar, etree.tostring(opts))
+ 
+@@ -1148,7 +1148,7 @@ class Xquery(object):
+             # since they will be compared differently
+ 
+             # if already numeric, use as is without any conversion
+-            if isinstance(value, (int, long, float)):
++            if isinstance(value, (int, float)):
+                 val = value
+             # otherwise, treat it as a string
+             else:
+@@ -1185,7 +1185,7 @@ class Xquery(object):
+         """
+         self.return_fields.update(fields)
+         if raw:
+-            self.raw_fields.extend(fields.keys())
++            self.raw_fields.extend(list(fields.keys()))
+ 
+     def return_also(self, fields, raw=False):
+         """Return additional specified fields.  See :meth:`return_only` for
+@@ -1198,7 +1198,7 @@ class Xquery(object):
+         """
+         self.additional_return_fields.update(fields)
+         if raw:
+-            self.raw_fields.extend(fields.keys())
++            self.raw_fields.extend(list(fields.keys()))
+ 
+     def _constructReturn(self):
+         """Construct the return portion of a FLOWR xquery."""
+@@ -1220,7 +1220,7 @@ class Xquery(object):
+                 rblocks = ["{%s}" % self.xq_var]    # return entire node
+ 
+             fields = dict(self.return_fields, **self.additional_return_fields)
+-            for name, xpath in fields.iteritems():
++            for name, xpath in fields.items():
+                 # special cases
+                 if name in self.special_fields:
+                     # reference any special fields requested as xquery variables
+@@ -1304,7 +1304,7 @@ class Xquery(object):
+         # common xpath clean-up before handing off to exist
+ 
+         # if the xpath passed in is a basestring, it has not yet been parsed
+-        if isinstance(xpath, basestring):
++        if isinstance(xpath, str):
+             parsed_xpath = parse(xpath)
+         else:
+             parsed_xpath = xpath
+@@ -1412,7 +1412,7 @@ class Xquery(object):
+             # when there are additional return fields, all extra fields
+             # are one step up relative to main node
+             prefix = '../'
+-        for name in fields.keys():
++        for name in list(fields.keys()):
+             if name in self.special_fields:
+                 # for predefined fields, xpath is the name of the field
+                 xpaths[name] = prefix + name
+diff --git a/eulexistdb/testutil.py b/eulexistdb/testutil.py
+index 51ca41a..ef945c6 100644
+--- a/eulexistdb/testutil.py
++++ b/eulexistdb/testutil.py
+@@ -162,8 +162,8 @@ class ExistDBTestWrapper(object):
+         else:
+             settings.EXISTDB_ROOT_COLLECTION = getattr(settings, "EXISTDB_ROOT_COLLECTION", "/default") + "_test"
+ 
+-        print >> sys.stderr, "Creating eXist Test Collection: %s" % \
+-            settings.EXISTDB_ROOT_COLLECTION
++        print("Creating eXist Test Collection: %s" % \
++            settings.EXISTDB_ROOT_COLLECTION, file=sys.stderr)
+         # now that existdb root collection has been set to test collection, init db connection
+         db = ExistDB()
+         # create test collection (don't complain if collection already exists)
+@@ -174,18 +174,18 @@ class ExistDBTestWrapper(object):
+         delattr(settings, "EXISTDB_ROOT_COLLECTION_REAL")
+ 
+         if self.stored_default_collection is not None:
+-            print >> sys.stderr, "Removing eXist Test Collection: %s" % settings.EXISTDB_ROOT_COLLECTION
++            print("Removing eXist Test Collection: %s" % settings.EXISTDB_ROOT_COLLECTION, file=sys.stderr)
+             # before restoring existdb non-test root collection, init db connection
+             db = ExistDB()
+             try:
+                 # remove test collection
+                 db.removeCollection(settings.EXISTDB_ROOT_COLLECTION)
+-            except ExistDBException, e:
+-                print >> sys.stderr, "Error removing collection %s: %s" \
+-                    % (settings.EXISTDB_ROOT_COLLECTION, e)
++            except ExistDBException as e:
++                print("Error removing collection %s: %s" \
++                    % (settings.EXISTDB_ROOT_COLLECTION, e), file=sys.stderr)
+ 
+-            print >> sys.stderr, "Restoring eXist Root Collection: %s" \
+-                % self.stored_default_collection
++            print("Restoring eXist Root Collection: %s" \
++                % self.stored_default_collection, file=sys.stderr)
+             settings.EXISTDB_ROOT_COLLECTION = self.stored_default_collection
+ 
+     @classmethod
