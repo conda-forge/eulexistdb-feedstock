@@ -9,10 +9,10 @@ source:
   sha256: 27c3bf3ca924af58f3ed509d6d83ea25fa333201680ad3568cccd8a99971a94d
   patches:
     # convert project to python 3
-    - convert_py3.patch
+    - convert_py3.patch  # [not py27]
 
 build:
-  number: 1
+  number: 2
   script: python -m pip install --no-deps --ignore-installed .
   noarch: python
 
