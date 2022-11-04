@@ -12,7 +12,7 @@ source:
     - convert_py3.patch  # [not py27]
 
 build:
-  number: 1006
+  number: 1007
   script: {{ PYTHON }} -m pip install . --no-deps -vv
 
 requirements:
