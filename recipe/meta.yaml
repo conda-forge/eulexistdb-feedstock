@@ -9,7 +9,7 @@ source:
   sha256: 27c3bf3ca924af58f3ed509d6d83ea25fa333201680ad3568cccd8a99971a94d
   patches:
     # convert project to python 3
-    - convert_py3.patch  # [not py27]
+    - convert_py3.patch
 
 build:
   number: 1007
